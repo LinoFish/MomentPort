@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/momentport-core", "crates/momentport-cli"]
+resolver = "2"

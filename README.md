@@ -1,8 +1,10 @@
 # MomentPort
 
-**MomentPort 是“其他设备照片、视频导入苹果相册”的通用工具。v1 先只做第一个功能：荣耀连拍 → 苹果连拍。**
+**MomentPort 是“其他设备照片、视频导入苹果相册”的通用工具。v1 先只做第一个功能：其他设备连拍 → 苹果连拍文件层标识，以荣耀连拍为例。**
 
-以后要加的功能（其他品牌照片、视频、实况等）都往这个工程里加，不用再起新名字、新工程。
+分组、EXIF 改写、Manifest 这些逻辑本来就与品牌无关：只要是 JPEG 连拍，哪个品牌导出的散图都按同一规则分组；荣耀只是目前写明的例子，不是唯一支持的品牌。以后要加的功能（其他品牌照片、视频、实况等）都往这个工程里加，不用再起新名字、新工程。
+
+**v1.1（Rust 核心，不用 Xcode）：转换的唯一事实来源是 `rust/` 下的 Rust 实现**，`cargo build --release` 出单文件命令行二进制。原来 v1 的 SwiftUI 工程保留为 v1 界面版，不再是核心；之前一度起步的 Python 转换 CLI 已被 Rust 版取代，不再同时维护两个转换实现（`Tools/verify_burst.py` 只保留作文件层校验脚本）。路线见 `ROADMAP.md`。
 
 ## 先说最重要的结论（不要跳过）
 
@@ -42,6 +44,43 @@ iPhone 连拍的分组标识，在 ExifTool 的 Apple MakerNote 表里是：
 
 分组错了怎么办：先把照片按组分到不同子文件夹，再重新选输入文件夹——这比在界面里拖拽合组更可靠。
 
+## 命令行用法（不用 Xcode，v1.1 主推）
+
+Dong 的电脑装不了 Xcode，所以 v1.1 的主推路径是 Rust 命令行，不依赖 `.xcodeproj`：
+
+```sh
+cd rust
+cargo build --release
+cargo test
+./target/release/momentport-cli <输入文件夹> <输出文件夹> --gap 2.0
+```
+
+常用选项（输入、输出文件夹必填，缺失时退出码 2）：
+
+```sh
+# 只列分组，不写任何文件（也不会创建输出文件夹）
+./target/release/momentport-cli <输入文件夹> <输出文件夹> --dry-run
+./target/release/momentport-cli <输入文件夹> <输出文件夹> --list
+
+# 改切分间隔、改关键帧、把单张也原样拷出来
+./target/release/momentport-cli <输入文件夹> <输出文件夹> --gap 3.0 --key-index 1 --copy-singles
+```
+
+参数说明：`--gap` 默认 2.0 秒（平铺文件夹里相邻间隔 > gap 切分，≤ gap 归一组）；`--key-index` 默认 0（越界时钳制到最后一帧）；`--copy-singles` 默认关闭（单张只记录，不写 BurstUUID；打开后原样拷到 `Singles/`，仍不写 BurstUUID）。
+
+输出结构（原图文件夹原封不动）：
+
+```text
+输出文件夹/
+  Burst_01/  Burst_02/  …   每组一个子文件夹，保留原文件名 + BurstManifest.json
+  Singles/                  仅 --copy-singles 时有：单张原样复制 + SinglesManifest.json
+  MomentPortReport.json     汇总：组、单张、live 配对、未处理原因
+```
+
+稳健性与明确处理（与 Swift 版口径一致，另见下文“限制”）：大写扩展名（`.JPG`）与小写同等处理；`.` 开头隐藏文件跳过并记原因；缺 EXIF 时间用文件修改时间兜底并在日志里标 `mtime兜底`；HEIC/视频等不静默丢弃，日志与报告里写清未处理原因，视频注明“未写 BurstUUID，视频连拍/实况转换不在本版范围”；同名 `.jpg` + `.mov` 标为 live 配对，两者拷到同一输出文件夹、保持同名，`.mov` 不写 BurstUUID，**不声称已转成苹果实况**；扫描只读顶层与一层子文件夹。
+
+macOS 专属能力分层见 `macos/BRIDGE.md`：Rust 核心只负责文件层；读 EXIF 时间可用 ImageIO、导入相册并回查 `burstIdentifier` 必须走 PhotoKit，那是一层薄桥接。**纯命令行调 PhotoKit 的签名/权限（TCC）门槛必须在 Dong 的 Mac 上实测后才能下结论**，本版不声称已复用 PhotoKit；`macos/import_to_photos.applescript` 只是把照片加进 Photos 的兜底，不声称成组、不回查。
+
 ## 使用步骤
 
 ### 准备
@@ -49,7 +88,7 @@ iPhone 连拍的分组标识，在 ExifTool 的 Apple MakerNote 表里是：
 1. 在荣耀手机图库里打开连拍，选要保留的帧，“另存为 / 保存”到手机存储（或直接用数据线把 DCIM 里的连拍 JPEG 拷到 Mac）。
 2. 建议按组分文件夹，例如：`荣耀连拍/生日蛋糕/`、`荣耀连拍/球场/`。
 
-### 在 macOS 12 上构建
+### 在 macOS 12 上构建（v1 界面版，v1.1 命令行不需要这一步）
 
 本工程面向 **macOS 12、Xcode 13、Swift 5**：
 
@@ -92,10 +131,11 @@ python3 Tools/verify_burst.py 输出文件夹/Burst_01 原图文件夹
 3. 兜底浏览方式：在相册里为该组建一个同名相簿（例如 `Burst_01`），把这组照片放进去——浏览体验接近成组，但它不是系统连拍，没有“选出最佳 / 只保留选中帧”的连拍操作；
 4. 保留 `BurstManifest.json`：换一台 Mac / 换一个相册版本后，可以拿同一批输出文件重新导入验证，不用重新转换。
 
-## 限制（v1，写在前面）
+## 限制（v1 / v1.1，写在前面）
 
-- 只处理 JPEG（`.jpg` / `.jpeg`）。荣耀连拍如果存成 HEIC 或其他格式，程序会跳过并在日志里写明原因，不会假装转了。
-- 视频、其他品牌照片、实况照片互转是后续功能，v1 没有实现，不要按已实现来用。
+- 只处理 JPEG（`.jpg` / `.jpeg`，大小写不限）。连拍如果存成 HEIC 或其他格式，程序会跳过并在日志/报告里写明原因，不会假装转了。
+- 视频、实况照片的真正转换是后续功能，v1.1 没有实现，不要按已实现来用。**Live 配对只是识别 + 同拷**：同名 `.jpg` + `.mov` 会被标注并拷到同一文件夹，`.mov` 不写 BurstUUID，不等于已转成苹果实况。
+- 扫描只读顶层与一层子文件夹；更深的嵌套不会被当成组，请先把组文件夹放到顶层下一层。
 - 复杂缩略图（带 StripOffsets 的 IFD1）重建时会丢弃缩略图 IFD，主图不受影响，相册会重新生成缩略图。
 - 不写、不改相册的 SQLite 数据库，不改 iCloud 状态。
 - 关键帧选择只影响导入顺序和 manifest 记录，代表图的最终决定权在相册里。
@@ -115,7 +155,15 @@ MomentPort/
   PhotoImporter.swift       PhotoKit 导入 + burstIdentifier 回查
   Info.plist                照片权限说明等
 Tools/
-  verify_burst.py           不依赖 exiftool 的文件层校验脚本
+  verify_burst.py           不依赖 exiftool 的文件层校验脚本（只校验，不转换）
+rust/                       v1.1 转换核心（唯一事实来源，零外部 crate）
+  Cargo.toml                工作区
+  crates/momentport-core/   库：分组、JPEG EXIF 段级改写、MakerNote、Manifest
+  crates/momentport-cli/    二进制 momentport-cli：cargo build --release 出单文件
+macos/
+  BRIDGE.md                 macOS 能力分层：文件层 / ImageIO / PhotoKit 回查 / 兜底
+  import_to_photos.applescript  只把照片加进 Photos 的兜底，不声称成组
+ROADMAP.md                  路线图：v1、v1.1 Rust 转向、更远的通用导入
 ```
 
 ## 本地验证记录（截至交付时）
@@ -130,3 +178,11 @@ Tools/
 - Make / Model / DateTimeOriginal 在转换后 TIFF 里原样保留。
 
 也就是说：文件层逻辑已验证，**相册层成组与否仍待你在 macOS 12 + 你的相册版本上用程序里的“导入并验证”确认**。
+
+## v1.1 Rust 验证记录（协调员亲自重跑，2026-10-27，Linux）
+
+- 工具链：工作区内 rustup，`cargo/rustc 1.99.1`，未改系统目录；`cargo test` **19 passed，0 failed**（含分组 gap 边界、MakerNote 双字节序往返、JPEG SOS 原样、TIFF 往返、UUID 形状、扫描大小写/隐藏/live 配对）。
+- `cargo build --release` 成功，单文件 `momentport-cli` 约 761 KB。
+- 协调员独立合成测试集（不用子代理的测试集）：子文件夹组 3 帧（含大写 `.JPG`）、平铺时间切分 f1+f2、缺 EXIF 时间用 mtime 兜底 n1+n2、live 子文件夹 2 帧 + 同名 `.mov`、单张 f3 与 solo、未处理 3 项（隐藏文件、`.heic`、未配对 `.mov`）。结果：4 组共 9 帧全部成功 0 跳过；`--dry-run` 未创建输出文件夹；`--copy-singles` 下单张原样进 `Singles/`；`verify_burst.py` 逐组通过（同组 BurstUUID 唯一 1 种、ImageUniqueID 各不相同、SOS 与原图一致）；live 的 `.mov` 字节与原文件一致；原图文件夹 SHA-256 对比**全部未动**。
+- 协调员测试中发现并已修复一个真实问题：部分写入器（含 PIL）把 `0x9003 DateTimeOriginal` 直接放在 IFD0 而非 ExifIFD 里，Rust 原版只在 ExifIFD 里找，会误退回 mtime 兜底、导致平铺组错合。已补 IFD0 兜底并加单测（`exif_time_in_ifd0_is_recognized`），修复后上述分组才全部正确。真实设备文件通常在 ExifIFD 里，修复前也不会在真机文件上全军覆没，但 ImageIO 式读取本应两种位置都认。
+- **未验证、不要按已验证来用**：没有在 macOS 上编译运行之外的验证（本机无 Mac），没有在相册里成组，没有复用 PhotoKit；AppleScript 兜底未经 macOS 实测；Rust 把无时区 EXIF 墙上时间按 UTC 换算仅用于排序切分，macOS 侧如需绝对本地时间应以 ImageIO 为准。
