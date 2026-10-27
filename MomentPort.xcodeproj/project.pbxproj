@@ -1,0 +1,228 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+		000000000000000000000065 /* App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000C9 /* App.swift */; };
+		000000000000000000000066 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CA /* ContentView.swift */; };
+		000000000000000000000067 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CB /* Models.swift */; };
+		000000000000000000000068 /* BurstGrouper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CC /* BurstGrouper.swift */; };
+		000000000000000000000069 /* JpegExif.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CD /* JpegExif.swift */; };
+		00000000000000000000006A /* AppleMakerNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CE /* AppleMakerNote.swift */; };
+		00000000000000000000006B /* MomentPortEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CF /* MomentPortEngine.swift */; };
+		00000000000000000000006C /* PhotoImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000D0 /* PhotoImporter.swift */; };
+		0000000000000000000000C9 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
+		0000000000000000000000CA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		0000000000000000000000CB /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		0000000000000000000000CC /* BurstGrouper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BurstGrouper.swift; sourceTree = "<group>"; };
+		0000000000000000000000CD /* JpegExif.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JpegExif.swift; sourceTree = "<group>"; };
+		0000000000000000000000CE /* AppleMakerNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMakerNote.swift; sourceTree = "<group>"; };
+		0000000000000000000000CF /* MomentPortEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MomentPortEngine.swift; sourceTree = "<group>"; };
+		0000000000000000000000D0 /* PhotoImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoImporter.swift; sourceTree = "<group>"; };
+		00000000000000000000012C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		000000000000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000000003 = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000004 /* MomentPort */,
+			);
+			sourceTree = "<group>";
+		};
+		000000000000000000000004 /* MomentPort */ = {
+			isa = PBXGroup;
+			children = (
+				0000000000000000000000C9 /* App.swift */,
+				0000000000000000000000CA /* ContentView.swift */,
+				0000000000000000000000CB /* Models.swift */,
+				0000000000000000000000CC /* BurstGrouper.swift */,
+				0000000000000000000000CD /* JpegExif.swift */,
+				0000000000000000000000CE /* AppleMakerNote.swift */,
+				0000000000000000000000CF /* MomentPortEngine.swift */,
+				0000000000000000000000D0 /* PhotoImporter.swift */,
+				00000000000000000000012C /* Info.plist */,
+			);
+			path = MomentPort;
+			sourceTree = "<group>";
+		};
+		000000000000000000000002 /* MomentPort */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000000009 /* Build configuration list for PBXNativeTarget "MomentPort" */;
+			buildPhases = (
+				000000000000000000000005 /* Sources */,
+				000000000000000000000006 /* Frameworks */,
+				000000000000000000000007 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MomentPort;
+			productName = MomentPort;
+			productReference = 000000000000000000000190 /* MomentPort.app */;
+			productType = "com.apple.product-type.application";
+		};
+		000000000000000000000190 /* MomentPort.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MomentPort.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1300;
+				LastUpgradeCheck = 1300;
+				TargetAttributes = {
+					000000000000000000000002 = {
+						CreatedOnToolsVersion = 13.0;
+					};
+				};
+			};
+			buildConfigurationList = 000000000000000000000008 /* Build configuration list for PBXProject "MomentPort" */;
+			compatibilityVersion = "Xcode 13.0";
+			developmentRegion = zh_CN;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				zh_CN,
+				Base,
+			);
+			mainGroup = 000000000000000000000003;
+			productRefGroup = 000000000000000000000003;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				000000000000000000000002 /* MomentPort */,
+			);
+		};
+		000000000000000000000007 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000000065 /* App.swift in Sources */,
+				000000000000000000000066 /* ContentView.swift in Sources */,
+				000000000000000000000067 /* Models.swift in Sources */,
+				000000000000000000000068 /* BurstGrouper.swift in Sources */,
+				000000000000000000000069 /* JpegExif.swift in Sources */,
+				00000000000000000000006A /* AppleMakerNote.swift in Sources */,
+				00000000000000000000006B /* MomentPortEngine.swift in Sources */,
+				00000000000000000000006C /* PhotoImporter.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		00000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = gnu++17;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LOCALIZATION_PREFS = zh_CN;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				SDKROOT = macosx;
+				SWIFT_EMBED_LIBRARIES_WITH_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		00000000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = gnu++17;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LOCALIZATION_PREFS = zh_CN;
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				SDKROOT = macosx;
+				SWIFT_EMBED_LIBRARIES_WITH_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		00000000000000000000000C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MomentPort/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.linofish.MomentPort;
+				PRODUCT_NAME = $(TARGET_NAME);
+				SWIFT_EMBED_LIBRARIES_WITH_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		00000000000000000000000D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MomentPort/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.linofish.MomentPort;
+				PRODUCT_NAME = $(TARGET_NAME);
+				SWIFT_EMBED_LIBRARIES_WITH_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		000000000000000000000008 /* Build configuration list for PBXProject "MomentPort" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00000000000000000000000A,
+				00000000000000000000000B,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		000000000000000000000009 /* Build configuration list for PBXNativeTarget "MomentPort" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00000000000000000000000C,
+				00000000000000000000000D,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+	};
+	rootObject = 000000000000000000000001 /* Project object */;
+}
