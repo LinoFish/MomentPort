@@ -2,7 +2,7 @@
 //! 与 Swift 版 `MomentPortEngine` 对齐，并按任务要求扩展：
 //! - 不重新编码像素，不改 Make / Model，不改拍摄时间与 GPS；
 //! - 不删除原图（输出到另一个文件夹，原文件夹原封不动）；
-//! - 转换后回读校验 BurstUUID / ImageUniqueID 再计成功，否则记入 skipped；
+//! - 转换后回读校验 BurstUUID / PhotoIdentifier 再计成功，否则记入 skipped；
 //! - 同组内重名加帧序号后缀；
 //! - live 配对视频原样拷到同一输出文件夹、保持同名，不写 BurstUUID，
 //!   不声称已转成苹果实况；

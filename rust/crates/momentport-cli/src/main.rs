@@ -13,9 +13,9 @@
 //! - --dry-run / --list 只列分组不写文件，不创建输出文件夹；
 //! - --list-json 只列分组不写文件，输出机器可读 JSON（见 preview_json，
 //!   供 SwiftUI 界面解析，不依赖上面的人类可读清单）；
-//! - --key-index 默认 0（第一帧为关键帧；越界时按组内最后一帧计）；
+//! - --key-index 未指定时优先荣耀 COVER，否则第一帧；显式指定时覆盖自动选择；
 //! - --key-indexes 按组顺序给每组不同的关键帧（逗号分隔，缺省的组用
-//!   --key-index 的值；越界时按组内最后一帧计）；
+//!   --key-index 的值或自动选择；越界时按组内最后一帧计）；
 //! - --copy-singles 可选：把单张原样拷到 Singles/（默认只记录，不写 BurstUUID）；
 //! - 输出：每组一个 Burst_01/、Burst_02/…子文件夹 + BurstManifest.json，
 //!   顶层写 MomentPortReport.json（汇总组、单张、live 配对与未处理原因）；
@@ -39,8 +39,8 @@ const USAGE: &str = "\
   --gap 秒          平铺分组间隔阈值，默认 2.0（间隔 > gap 切分）
   --dry-run, --list 只列分组，不写文件
   --list-json       只列分组不写文件，输出 JSON 预览（供界面解析）
-  --key-index N     关键帧索引，默认 0
-  --key-indexes A,B 按组顺序的关键帧索引（逗号分隔，缺省组用 --key-index）
+  --key-index N     覆盖自动关键帧（默认荣耀 COVER，否则第一帧）
+  --key-indexes A,B 按组顺序的关键帧索引（逗号分隔，缺省组保留全局/自动选择）
   --copy-singles    把单张原样拷到 Singles/（默认只记录，不写 BurstUUID）
   -h, --help        显示本帮助
 ";
@@ -51,7 +51,7 @@ struct Args {
     gap: f64,
     dry_run: bool,
     list_json: bool,
-    key_index: usize,
+    key_index: Option<usize>,
     key_indexes: Option<Vec<usize>>,
     copy_singles: bool,
 }
@@ -184,7 +184,7 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
         gap: 2.0,
         dry_run: false,
         list_json: false,
-        key_index: 0,
+        key_index: None,
         key_indexes: None,
         copy_singles: false,
     };
@@ -219,9 +219,10 @@ fn parse_args(argv: &[String]) -> Result<Args, String> {
             }
             "--key-index" => {
                 let v = take_value(&mut i, inline_val)?;
-                args.key_index = v
-                    .parse::<usize>()
-                    .map_err(|_| format!("--key-index 取值不是非负整数：{}", v))?;
+                args.key_index = Some(
+                    v.parse::<usize>()
+                        .map_err(|_| format!("--key-index 取值不是非负整数：{}", v))?,
+                );
             }
             "--key-indexes" => {
                 let v = take_value(&mut i, inline_val)?;
@@ -312,12 +313,12 @@ fn main() -> ExitCode {
         }
     };
     let mut grouping = group_photos(&scan.photos, args.gap, args.key_index);
-    // 每组不同的关键帧：按组顺序覆盖，缺省的组保留 --key-index 的值。
-    // 越界不报错，key_photo() 在使用时钳制到最后一帧（与旧口径一致）。
+    // 按组顺序覆盖；缺省组保留显式全局值或自动封面/首帧。
+    // 立即钳制，让预览、转换、manifest 的关键帧索引一致。
     if let Some(list) = &args.key_indexes {
         for (i, g) in grouping.groups.iter_mut().enumerate() {
             if let Some(k) = list.get(i) {
-                g.key_index = *k;
+                g.key_index = (*k).min(g.photos.len() - 1);
             }
         }
     }
@@ -343,7 +344,12 @@ fn main() -> ExitCode {
         scan.live_pairs.len(),
         scan.unprocessed.len()
     );
-    println!("连拍组 {} 组（gap={} 秒，key-index={}）：", grouping.groups.len(), args.gap, args.key_index);
+    println!(
+        "连拍组 {} 组（gap={} 秒，key-index={}）：",
+        grouping.groups.len(),
+        args.gap,
+        args.key_index.map(|v| v.to_string()).unwrap_or_else(|| "自动".to_string())
+    );
     for (i, g) in grouping.groups.iter().enumerate() {
         println!(
             "  Burst_{:02}  {} 帧  {}  关键帧：{}",

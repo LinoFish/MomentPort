@@ -5,17 +5,19 @@
 > `representsBurst` 都是只读属性。本文件不写一个假的 PhotoKit 桥接实现来冒充；
 > 下面分层写清楚：哪一层已实现、哪一层必须在 Dong 的 Mac 上实测后才能下结论。
 
+2026-10-28 更正：旧 MakerNote 缺 Apple 头部，旧文件层自检不能证明兼容。修复后已在 macOS 用 ImageIO 验证原生样片和 46 张荣耀输出；用户已于 2026-10-28 确认本次 Apple Photos 实际验证通过；仅覆盖本次测试环境与文件，不推及所有系统、设备或导入途径。PhotoKit shared 访问系统图库，不能用它对当前 Photos 窗口选中的辅助图库做隔离测试。见 [当前证据及复验步骤](APPLE_BURST_VALIDATION.md)。
+
 ## 三层分工
 
 ### 第 1 层：Rust 核心（文件层，跨平台）——已实现
 
 位置：`../rust/`（`momentport-core` 库 + `momentport-cli` 二进制，仅标准库）。
 
-- 分组：子文件夹优先、平铺按拍摄时间切分（默认间隔 2.0 秒）；
+- 分组：荣耀命名标识优先且按目录隔离；剩余照片按子文件夹或拍摄时间切分（默认间隔 2.0 秒）；
 - JPEG 只改 EXIF 段、像素 SOS 原样复制；Apple MakerNote 写 BurstUUID（0x000b，
-  同组同一大写连字符 UUID）、每帧不同 ImageUniqueID（0x0015）、版本 15（0x0001）；
+  同组同一大写连字符 UUID）、每帧不同 PhotoIdentifier（0x002b）、signed LONG 版本 17（0x0001）；完整 Apple iOS 头部、独立 MM 字节序；
 - 输出 `Burst_01/`、`Burst_02/`… + `BurstManifest.json` + 顶层 `MomentPortReport.json`；
-- 转换后回读校验 BurstUUID / ImageUniqueID 再计成功；原图文件夹原封不动；
+- 转换后回读校验 BurstUUID / PhotoIdentifier 再计成功；原图文件夹原封不动；
 - 绝不写/改相册 SQLite；绝不把 Make / Model 改成 Apple。
 
 这一层可在 Linux 上 `cargo test`、跑 CLI 全流程；本机 Linux 已实测的部分见任务回报，
@@ -71,7 +73,7 @@ cargo test
 ./target/release/momentport-cli <输入文件夹> <输出文件夹> --gap 2.0
 ./target/release/momentport-cli <输入文件夹> <输出文件夹> --dry-run
 
-# 3. 文件层校验（仍用保留的 Tools/verify_burst.py，不改它）
+# 3. 文件层校验（使用已修正的 Tools/verify_burst.py）
 python3 ../Tools/verify_burst.py <输出文件夹>/Burst_01 <原图文件夹>
 
 # 4. AppleScript 兜底导入（只导入，不声称成组）

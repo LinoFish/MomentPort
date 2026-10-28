@@ -174,185 +174,233 @@ final class ConverterModel: ObservableObject {
 struct ContentView: View {
     @StateObject private var model = ConverterModel()
 
+    // 每个区域独立推断类型，不增加布局容器，保留原 VStack 的间距。
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesignSystem.spacingMedium) {
-                Text("MomentPort")
-                    .font(.title2).bold()
-                    .accessibilityAddTraits(.isHeader)
-                Text("把其他设备导出的连拍照片写成苹果相册能识别的连拍格式。原图不动，输出是副本；是否成组，导入后程序会回查并如实告诉你。苹果没有公开连拍文件格式，本程序不承诺 100% 成组，详见 README。")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if let error = model.errorSummary {
-                    StatusBanner(kind: .error, text: error)
-                }
-
-                // 第 1 步：输入与分组预览
-                StepHeader(step: 1, title: "选择输入文件夹，分组预览")
-                HStack {
-                    Button("选择输入文件夹") {
-                        model.pickFolder(title: "选择含连拍照片的文件夹") { url in
-                            if let url = url {
-                                model.inputFolder = url
-                                model.rescan()
-                            }
-                        }
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .accessibilityLabel("选择输入文件夹")
-                    Text(model.inputFolder?.path ?? "未选择")
-                        .font(.callout).lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                    Button("自选 Rust 后端") { model.pickBinary() }
-                        .buttonStyle(SecondaryButtonStyle())
-                        .accessibilityLabel("自选 Rust 后端二进制路径")
-                }
-                HStack {
-                    Text("平铺文件按时间切分，间隔 ≤")
-                    Stepper(value: $model.gapSeconds, in: 0.5...10, step: 0.5) {
-                        Text("\(model.gapSeconds, specifier: "%.1f") 秒")
-                    }
-                    .accessibilityLabel("时间间隔，当前 \(model.gapSeconds, specifier: "%.1f") 秒")
-                    .onChange(of: model.gapSeconds) { _ in model.rescan() }
-                    Spacer()
-                    if model.livePairCount > 0 {
-                        Text("live 配对 \(model.livePairCount) 对（视频原样同拷，不写 BurstUUID）")
-                            .font(.caption).foregroundColor(.secondary)
-                    }
-                }
-
-                if !model.groups.isEmpty {
-                    Text("连拍组（\(model.groups.count) 组）")
-                        .font(.headline)
-                    // 用下标访问，避免 ForEach($groups) 里绑定参数的歧义写法。
-                    ForEach(model.groups.indices, id: \.self) { groupIndex in
-                        let group = model.groups[groupIndex]
-                        VStack(alignment: .leading, spacing: DesignSystem.spacingSmall) {
-                            HStack {
-                                Text("\(group.photos.count) 帧 · \(group.sourceDescription)")
-                                    .font(.headline)
-                                Spacer()
-                                Text("关键帧：\(group.keyPhoto?.fileName ?? "")")
-                                    .font(.callout)
-                            }
-                            Text(group.timeRange).font(.caption).foregroundColor(.secondary)
-                            ScrollView(.horizontal, showsIndicators: true) {
-                                HStack(spacing: DesignSystem.spacingSmall) {
-                                    ForEach(Array(group.photos.enumerated()), id: \.element.id) { i, photo in
-                                        FrameCell(photo: photo, index: i, isKeyFrame: i == group.keyIndex) {
-                                            model.groups[groupIndex].keyIndex = i
-                                        }
-                                    }
-                                }
-                            }
-                            Picker("关键帧", selection: $model.groups[groupIndex].keyIndex) {
-                                ForEach(0..<group.photos.count, id: \.self) { i in
-                                    Text("第 \(i + 1) 帧：\(group.photos[i].fileName)").tag(i)
-                                }
-                            }
-                            .accessibilityLabel("第 \(groupIndex + 1) 组关键帧选择")
-                            .labelsHidden()
-                        }
-                        Divider()
-                    }
-                }
-
-                if !model.singles.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("单张（\(model.singles.count) 张，不转换）")
-                            .font(.headline)
-                        Text("单张不是连拍，不写 BurstUUID；勾选“复制单张”时也只是原样复制，不改 EXIF。")
-                            .font(.callout).foregroundColor(.secondary)
-                        Text(model.singles.map { $0.fileName }.joined(separator: "、"))
-                            .font(.caption)
-                    }
-                }
-
-                if !model.unprocessed.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("未处理（\(model.unprocessed.count) 项，不静默丢弃）")
-                            .font(.headline)
-                        ForEach(Array(model.unprocessed.enumerated()), id: \.offset) { _, item in
-                            Text("\(item.fileName)：\(item.reason)")
-                                .font(.caption)
-                                .accessibilityLabel("\(item.fileName)，未处理原因：\(item.reason)")
-                        }
-                    }
-                }
-
-                // 第 2 步：输出与转换
-                StepHeader(step: 2, title: "选择输出文件夹，转换")
-                HStack {
-                    Button("选择输出文件夹") {
-                        model.pickFolder(title: "选择输出文件夹（转换结果放这里）") { url in
-                            model.outputFolder = url
-                        }
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    Text(model.outputFolder?.path ?? "未选择")
-                        .font(.callout).lineLimit(1).truncationMode(.middle)
-                    Spacer()
-                }
-                Toggle("同时把单张原样复制到 Singles/", isOn: $model.copySingles)
-                    .accessibilityLabel("同时把单张原样复制到 Singles 文件夹")
-                Button("转换") { model.convert() }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(model.isWorking || model.convertDisabledReason != nil)
-                    .accessibilityLabel("转换")
-                if let reason = model.convertDisabledReason {
-                    Text(reason).font(.callout).foregroundColor(.secondary)
-                }
-                if let report = model.report {
-                    StatusBanner(kind: .success, text: "转换完成：\(report.groups.count) 组。文件层 BurstUUID 已写好；这不等于相册已成组，成组与否看第 3 步的回查。")
-                    ForEach(report.groups, id: \.folderName) { group in
-                        Text("\(group.folderName)：\(group.frameCount) 帧，关键帧 \(group.keyFrameFileName)")
-                            .font(.callout)
-                    }
-                }
-
-                // 第 3 步：导入与验证（“已导入”和“已识别为连拍”分开写）
-                StepHeader(step: 3, title: "导入到相册并验证")
-                Button("导入到相册并验证") { model.importAll() }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(model.isWorking || model.importDisabledReason != nil)
-                    .accessibilityLabel("导入到相册并验证")
-                if let reason = model.importDisabledReason {
-                    Text(reason).font(.callout).foregroundColor(.secondary)
-                }
-                if !model.verifications.isEmpty {
-                    ForEach(model.verifications) { v in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("已导入：\(v.importedCount) / \(v.frameCount) 张")
-                                .font(.headline)
-                            Text("已识别为连拍：\(v.representsBurst ? "是" : "否")")
-                                .font(.headline)
-                                .foregroundColor(v.representsBurst ? .mpDeepBlue : .secondary)
-                            Text(v.message)
-                                .font(.callout)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Divider()
-                    }
-                }
-
-                // 日志：仍保留完整记录，但错误摘要已在顶部，不只靠翻日志找错。
-                StepHeader(step: 4, title: "日志")
-                Text("转换与验证的完整记录都在这里；出错时先看顶部红色错误条。")
-                    .font(.callout).foregroundColor(.secondary)
-                ScrollView {
-                    Text(model.log.isEmpty ? "还没有日志。先选输入文件夹。" : model.log)
-                        .font(.system(.callout, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                }
-                .frame(height: 160)
-                if model.isWorking {
-                    ProgressView().progressViewStyle(.linear)
-                }
+                introduction
+                errorBanner
+                inputSection
+                groupsPreview
+                singlesPreview
+                unprocessedPreview
+                outputSection
+                importSection
+                logSection
             }
             .padding(DesignSystem.spacingMedium)
+        }
+    }
+
+    @ViewBuilder
+    private var introduction: some View {
+        Text("MomentPort")
+            .font(.title2).bold()
+            .accessibilityAddTraits(.isHeader)
+        Text("把其他设备导出的连拍照片写成苹果相册能识别的连拍格式。原图不动，输出是副本；是否成组，导入后程序会回查并如实告诉你。苹果没有公开连拍文件格式，本程序不承诺 100% 成组，详见 README。")
+            .font(.callout)
+            .foregroundColor(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var errorBanner: some View {
+        if let error = model.errorSummary {
+            StatusBanner(kind: .error, text: error)
+        }
+    }
+
+    @ViewBuilder
+    private var inputSection: some View {
+        // 第 1 步：输入与分组预览
+        StepHeader(step: 1, title: "选择输入文件夹，分组预览")
+        HStack {
+            Button("选择输入文件夹") {
+                model.pickFolder(title: "选择含连拍照片的文件夹") { url in
+                    if let url = url {
+                        model.inputFolder = url
+                        model.rescan()
+                    }
+                }
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            .accessibilityLabel("选择输入文件夹")
+            Text(model.inputFolder?.path ?? "未选择")
+                .font(.callout).lineLimit(1).truncationMode(.middle)
+            Spacer()
+            Button("自选 Rust 后端") { model.pickBinary() }
+                .buttonStyle(SecondaryButtonStyle())
+                .accessibilityLabel("自选 Rust 后端二进制路径")
+        }
+        HStack {
+            Text("平铺文件按时间切分，间隔 ≤")
+            Stepper(value: $model.gapSeconds, in: 0.5...10, step: 0.5) {
+                Text("\(model.gapSeconds, specifier: "%.1f") 秒")
+            }
+            .accessibilityLabel("时间间隔，当前 \(model.gapSeconds, specifier: "%.1f") 秒")
+            .onChange(of: model.gapSeconds) { _ in model.rescan() }
+            Spacer()
+            if model.livePairCount > 0 {
+                Text("live 配对 \(model.livePairCount) 对（视频原样同拷，不写 BurstUUID）")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var groupsPreview: some View {
+        if !model.groups.isEmpty {
+            Text("连拍组（\(model.groups.count) 组）")
+                .font(.headline)
+            ForEach(model.groups.indices, id: \.self) { groupIndex in
+                BurstGroupPreview(group: $model.groups[groupIndex], groupIndex: groupIndex)
+                Divider()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var singlesPreview: some View {
+        if !model.singles.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("单张（\(model.singles.count) 张，不转换）")
+                    .font(.headline)
+                Text("单张不是连拍，不写 BurstUUID；勾选“复制单张”时也只是原样复制，不改 EXIF。")
+                    .font(.callout).foregroundColor(.secondary)
+                Text(model.singles.map { $0.fileName }.joined(separator: "、"))
+                    .font(.caption)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var unprocessedPreview: some View {
+        if !model.unprocessed.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("未处理（\(model.unprocessed.count) 项，不静默丢弃）")
+                    .font(.headline)
+                ForEach(Array(model.unprocessed.enumerated()), id: \.offset) { _, item in
+                    Text("\(item.fileName)：\(item.reason)")
+                        .font(.caption)
+                        .accessibilityLabel("\(item.fileName)，未处理原因：\(item.reason)")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var outputSection: some View {
+        // 第 2 步：输出与转换
+        StepHeader(step: 2, title: "选择输出文件夹，转换")
+        HStack {
+            Button("选择输出文件夹") {
+                model.pickFolder(title: "选择输出文件夹（转换结果放这里）") { url in
+                    model.outputFolder = url
+                }
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            Text(model.outputFolder?.path ?? "未选择")
+                .font(.callout).lineLimit(1).truncationMode(.middle)
+            Spacer()
+        }
+        Toggle("同时把单张原样复制到 Singles/", isOn: $model.copySingles)
+            .accessibilityLabel("同时把单张原样复制到 Singles 文件夹")
+        Button("转换") { model.convert() }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(model.isWorking || model.convertDisabledReason != nil)
+            .accessibilityLabel("转换")
+        if let reason = model.convertDisabledReason {
+            Text(reason).font(.callout).foregroundColor(.secondary)
+        }
+        if let report = model.report {
+            StatusBanner(kind: .success, text: "转换完成：\(report.groups.count) 组。文件层 BurstUUID 已写好；这不等于相册已成组，成组与否看第 3 步的回查。")
+            ForEach(report.groups, id: \.folderName) { group in
+                Text("\(group.folderName)：\(group.frameCount) 帧，关键帧 \(group.keyFrameFileName)")
+                    .font(.callout)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var importSection: some View {
+        // 第 3 步：导入与验证（“已导入”和“已识别为连拍”分开写）
+        StepHeader(step: 3, title: "导入到相册并验证")
+        Button("导入到相册并验证") { model.importAll() }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(model.isWorking || model.importDisabledReason != nil)
+            .accessibilityLabel("导入到相册并验证")
+        Text("此按钮导入系统照片图库。测试其他图库时，请在 Photos 中手动导入输出文件。")
+            .font(.callout).foregroundColor(.secondary)
+        if let reason = model.importDisabledReason {
+            Text(reason).font(.callout).foregroundColor(.secondary)
+        }
+        if !model.verifications.isEmpty {
+            ForEach(model.verifications) { v in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("已导入：\(v.importedCount) / \(v.frameCount) 张")
+                        .font(.headline)
+                    Text("已识别为连拍：\(v.recognizedAsBurst ? "是" : "否")")
+                        .font(.headline)
+                        .foregroundColor(v.recognizedAsBurst ? .mpDeepBlue : .secondary)
+                    Text(v.message)
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Divider()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var logSection: some View {
+        // 日志：仍保留完整记录，但错误摘要已在顶部，不只靠翻日志找错。
+        StepHeader(step: 4, title: "日志")
+        Text("转换与验证的完整记录都在这里；出错时先看顶部红色错误条。")
+            .font(.callout).foregroundColor(.secondary)
+        ScrollView {
+            Text(model.log.isEmpty ? "还没有日志。先选输入文件夹。" : model.log)
+                .font(.system(.callout, design: .monospaced))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+        }
+        .frame(height: 160)
+        if model.isWorking {
+            ProgressView().progressViewStyle(.linear)
+        }
+    }
+}
+
+/// 绑定原模型中的组，帧条与 Picker 继续共享同一个关键帧索引。
+private struct BurstGroupPreview: View {
+    @Binding var group: BurstGroup
+    let groupIndex: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DesignSystem.spacingSmall) {
+            HStack {
+                Text("\(group.photos.count) 帧 · \(group.sourceDescription)")
+                    .font(.headline)
+                Spacer()
+                Text("关键帧：\(group.keyPhoto?.fileName ?? "")")
+                    .font(.callout)
+            }
+            Text(group.timeRange).font(.caption).foregroundColor(.secondary)
+            ScrollView(.horizontal, showsIndicators: true) {
+                HStack(spacing: DesignSystem.spacingSmall) {
+                    ForEach(Array(group.photos.enumerated()), id: \.element.id) { i, photo in
+                        FrameCell(photo: photo, index: i, isKeyFrame: i == group.keyIndex) {
+                            group.keyIndex = i
+                        }
+                    }
+                }
+            }
+            Picker("关键帧", selection: $group.keyIndex) {
+                ForEach(0..<group.photos.count, id: \.self) { i in
+                    Text("第 \(i + 1) 帧：\(group.photos[i].fileName)").tag(i)
+                }
+            }
+            .accessibilityLabel("第 \(groupIndex + 1) 组关键帧选择")
+            .labelsHidden()
         }
     }
 }

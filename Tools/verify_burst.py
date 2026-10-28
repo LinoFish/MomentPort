@@ -6,14 +6,13 @@
 
 检查三件事：
 1. 同一组每个文件的 MakerNote 里 BurstUUID 相同；
-2. 每帧的 ImageUniqueID 各不相同；
+2. 每帧的 PhotoIdentifier 各不相同；
 3. 若给了原图文件夹：转换后文件的 SOS 扫描数据与原图完全相同
    （即像素没有被重新编码，只换了 EXIF 段）。
 
-MakerNote 格式与 BurstConverter 的 AppleMakerNote.swift 一致：
-迷你 TIFF IFD，字节序与外层 TIFF 相同，字符串偏移相对 MakerNote 起始。
+只接受带 Apple iOS 头的原生布局：IFD 从 14 开始，字节序独立，偏移相对 MakerNote 起始。
+这仍只是文件层检查；系统解析请另外运行 verify_imageio.swift。
 """
-import os
 import struct
 import sys
 from pathlib import Path
@@ -57,10 +56,17 @@ def parse_tiff(tiff):
 
 
 def parse_makernote(data, endian):
-    (count,) = struct.unpack_from(endian + "H", data, 0)
+    if len(data) < 20 or data[:12] != b"Apple iOS\0\0\x01":
+        return None, None
+    endian = {b"MM": ">", b"II": "<"}.get(data[12:14])
+    if endian is None:
+        return None, None
+    (count,) = struct.unpack_from(endian + "H", data, 14)
+    if 16 + count * 12 + 4 > len(data):
+        return None, None
     out = {}
     for i in range(count):
-        e = 2 + i * 12
+        e = 16 + i * 12
         tag, typ, cnt = struct.unpack_from(endian + "HHI", data, e)
         size = cnt * TYPE_SIZE.get(typ, 1)
         if typ != 2:
@@ -71,7 +77,7 @@ def parse_makernote(data, endian):
             (voff,) = struct.unpack_from(endian + "I", data, e + 8)
             raw = data[voff : voff + size]
         out[tag] = raw.split(b"\x00")[0].decode("ascii", "replace")
-    return out.get(0x000B), out.get(0x0015)
+    return out.get(0x000B), out.get(0x002B) or out.get(0x0015)
 
 
 def burst_info(path):
@@ -127,7 +133,7 @@ def main():
     ok = True
     for f in files:
         burst, unique = burst_info(f)
-        print(f"{f.name}: BurstUUID={burst} ImageUniqueID={unique}")
+        print(f"{f.name}: BurstUUID={burst} PhotoIdentifier={unique}")
         if burst is None:
             print("  !! 读不到 BurstUUID")
             ok = False
@@ -135,22 +141,24 @@ def main():
             bursts.add(burst)
         if unique:
             if unique in uniques:
-                print("  !! ImageUniqueID 重复")
+                print("  !! PhotoIdentifier 重复")
                 ok = False
             uniques.add(unique)
         if original_folder is not None:
             orig = original_folder / f.name
-            # 重名加帧序号的情况：按同名找不到就跳过像素比对，只报提示。
-            if orig.exists():
+            if not orig.exists():
+                print("  !! 找不到对应原图，无法验证像素")
+                ok = False
+            else:
                 if sos_suffix(f) != sos_suffix(orig):
                     print("  !! SOS 扫描数据与原图不一致（像素可能被改动）")
                     ok = False
                 else:
                     print("  像素扫描数据与原图一致")
-    print(f"共 {len(files)} 帧，BurstUUID 种类：{len(bursts)}（应为 1），ImageUniqueID 种类：{len(uniques)}（应为 {len(files)}）")
+    print(f"共 {len(files)} 帧，BurstUUID 种类：{len(bursts)}（应为 1），PhotoIdentifier 种类：{len(uniques)}（应为 {len(files)}）")
     if len(bursts) == 1 and len(uniques) == len(files) and ok:
-        print("通过：同一组共享 BurstUUID，每帧唯一，文件层分组标识完整。")
-        print("注意：这只证明文件写对了，最终是否在相册里成组，还要看导入后的 PhotoKit 回查。")
+        print("通过：带 Apple 头的同组 BurstUUID 一致，每帧 PhotoIdentifier 唯一。")
+        print("注意：这只是文件层校验，最终是否在相册里成组，还要看导入后的 PhotoKit 回查。")
         return 0
     print("未通过：见上面的 !! 标记。")
     return 1

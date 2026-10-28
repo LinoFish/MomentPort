@@ -1,4 +1,4 @@
-//! 分组。直接移植 Swift 版 `BurstGrouper.group`：
+//! 分组：优先按已识别的荣耀连拍 ID（在目录内隔离）分组；剩余照片沿用：
 //! 1. 子文件夹优先：每个含 ≥2 张照片的子文件夹算一组；
 //! 2. 平铺文件夹：按拍摄时间排序，相邻间隔 ≤ gap 归一组，> gap 切开；
 //! 3. 只有 1 张的“组”不算连拍，列为单张，不写 BurstUUID。
@@ -44,7 +44,8 @@ fn sorted(mut photos: Vec<PhotoFile>) -> Vec<PhotoFile> {
     photos
 }
 
-pub fn group_photos(photos: &[PhotoFile], gap_seconds: f64, key_index: usize) -> Grouping {
+/// None 自动选荣耀封面/第一帧；Some 显式覆盖（含 0），越界钳制。
+pub fn group_photos(photos: &[PhotoFile], gap_seconds: f64, key_index: Option<usize>) -> Grouping {
     // 先按“所在子文件夹”分桶；顶层文件归为 "" 桶；桶顺序 = 桶内首张照片出现顺序。
     let mut buckets: Vec<(String, Vec<PhotoFile>)> = Vec::new();
     for p in photos {
@@ -56,13 +57,49 @@ pub fn group_photos(photos: &[PhotoFile], gap_seconds: f64, key_index: usize) ->
     }
     let mut out = Grouping::default();
     for (key, bucket) in buckets {
-        let bucket = sorted(bucket);
+        // 显式连拍先取走；即使只剩一帧也不再落入目录/时间猜测，避免混组。
+        let mut identified: Vec<(String, Vec<PhotoFile>)> = Vec::new();
+        let mut remaining = Vec::new();
+        for photo in sorted(bucket) {
+            if let Some(burst) = &photo.honor_burst {
+                let id = burst.group_id.clone();
+                if let Some((_, frames)) = identified.iter_mut().find(|(k, _)| *k == id) {
+                    frames.push(photo);
+                } else {
+                    identified.push((id, vec![photo]));
+                }
+            } else {
+                remaining.push(photo);
+            }
+        }
+        for (id, mut frames) in identified {
+            if frames.len() < 2 {
+                out.singles.extend(frames);
+                continue;
+            }
+            frames.sort_by(|a, b| {
+                a.honor_burst.as_ref().unwrap().frame_index
+                    .cmp(&b.honor_burst.as_ref().unwrap().frame_index)
+                    .then_with(|| a.capture_ms.cmp(&b.capture_ms))
+                    .then_with(|| a.path.cmp(&b.path))
+            });
+            let cover = frames.iter().position(|p| p.honor_burst.as_ref().unwrap().is_cover).unwrap_or(0);
+            let selected = key_index.unwrap_or(cover).min(frames.len() - 1);
+            out.groups.push(BurstGroup {
+                photos: frames,
+                burst_uuid: new_uuid_upper(),
+                key_index: selected,
+                source_description: format!("荣耀连拍文件名：{}{}", id,
+                    if key.is_empty() { String::new() } else { format!("（子文件夹：{}）", key) }),
+            });
+        }
+        let bucket = remaining;
         if !key.is_empty() {
             if bucket.len() >= 2 {
                 out.groups.push(BurstGroup {
+                    key_index: key_index.unwrap_or(0).min(bucket.len() - 1),
                     photos: bucket,
                     burst_uuid: new_uuid_upper(),
-                    key_index,
                     source_description: format!("子文件夹：{}", key),
                 });
             } else {
@@ -76,9 +113,9 @@ pub fn group_photos(photos: &[PhotoFile], gap_seconds: f64, key_index: usize) ->
         let flush = |current: &mut Vec<PhotoFile>, out: &mut Grouping, gap_seconds: f64| {
             if current.len() >= 2 {
                 out.groups.push(BurstGroup {
+                    key_index: key_index.unwrap_or(0).min(current.len() - 1),
                     photos: std::mem::take(current),
                     burst_uuid: new_uuid_upper(),
-                    key_index,
                     source_description: format!(
                         "按时间自动分组（间隔 ≤ {} 秒）",
                         gap_seconds
@@ -113,6 +150,7 @@ mod tests {
             dir_key: dir.to_string(),
             capture_ms: ms,
             has_exif_date: true,
+            honor_burst: crate::honor::from_filename(name, None),
         }
     }
 
@@ -126,7 +164,7 @@ mod tests {
             photo("f3.jpg", "", 20000), // 与 f2 间隔 9500ms > 2000ms，切开
             photo("solo.jpg", "", 40000),
         ];
-        let g = group_photos(&photos, 2.0, 0);
+        let g = group_photos(&photos, 2.0, None);
         assert_eq!(g.groups.len(), 2);
         assert_eq!(g.groups[0].photos.len(), 2); // 子文件夹组
         assert_eq!(g.groups[0].source_description, "子文件夹：A");
@@ -143,7 +181,7 @@ mod tests {
             photo("a.jpg", "", 0),
             photo("b.jpg", "", 2000),
         ];
-        let g = group_photos(&photos, 2.0, 0);
+        let g = group_photos(&photos, 2.0, None);
         assert_eq!(g.groups.len(), 1);
         assert_eq!(g.singles.len(), 0);
     }
@@ -151,8 +189,60 @@ mod tests {
     #[test]
     fn single_subfolder_is_not_a_burst() {
         let photos = vec![photo("only.jpg", "A", 0)];
-        let g = group_photos(&photos, 2.0, 0);
+        let g = group_photos(&photos, 2.0, None);
         assert_eq!(g.groups.len(), 0);
         assert_eq!(g.singles.len(), 1);
+    }
+
+    #[test]
+    fn honor_missing_cover_and_sparse_frames_ignore_time_gap() {
+        let photos = vec![
+            photo("IMG_20230108_205027_BURST090.JPG", "", 6000),
+            photo("IMG_20230108_205027_BURST005.JPG", "", 1),
+            photo("IMG_20230108_205027_BURST002.JPG", "", 2),
+        ];
+        let g = group_photos(&photos, 0.0, None);
+        assert_eq!(g.groups.len(), 1);
+        let group = &g.groups[0];
+        assert_eq!(group.photos.iter().map(|p| p.honor_burst.as_ref().unwrap().frame_index).collect::<Vec<_>>(), vec![2, 5, 90]);
+        assert_eq!(group.key_index, 0);
+        assert!(g.singles.is_empty());
+    }
+
+    #[test]
+    fn honor_cover_is_default_and_explicit_selection_wins() {
+        let photos = vec![
+            photo("IMG_20230108_210659_BURST008_COVER.JPG", "A", 0),
+            photo("IMG_20230108_210659_BURST003.JPG", "A", 100),
+            photo("IMG_20230108_210659_BURST001.JPG", "A", 200),
+        ];
+        let g = group_photos(&photos, 2.0, None);
+        assert_eq!(g.groups[0].key_index, 2);
+        assert!(g.groups[0].key_photo().unwrap().file_name.contains("008_COVER"));
+        assert_eq!(group_photos(&photos, 2.0, Some(0)).groups[0].key_index, 0);
+        assert_eq!(group_photos(&photos, 2.0, Some(99)).groups[0].key_index, 2);
+    }
+
+    #[test]
+    fn honor_ids_directories_and_ordinary_photos_are_isolated() {
+        // 目录 4 的两种 ID，以及同秒的普通图/孤立封面，不能被目录或 gap 误合并。
+        let mut photos = Vec::new();
+        for dir in ["", "4", "other"] {
+            for id in ["210715", "210752"] {
+                for frame in ["003", "008"] {
+                    photos.push(photo(&format!("IMG_20230108_{}_BURST{}.JPG", id, frame), dir, 1000));
+                }
+            }
+            photos.push(photo("IMG_20230108_210759_BURST001_COVER.JPG", dir, 1000));
+            photos.push(photo("IMG_20230108_210715.JPG", dir, 1000));
+        }
+        let g = group_photos(&photos, 10.0, None);
+        assert_eq!(g.groups.len(), 6);
+        assert_eq!(g.singles.len(), 6);
+        for group in &g.groups {
+            assert_eq!(group.photos.len(), 2);
+            assert!(group.photos.iter().all(|p| p.dir_key == group.photos[0].dir_key
+                && p.honor_burst.as_ref().unwrap().group_id == group.photos[0].honor_burst.as_ref().unwrap().group_id));
+        }
     }
 }

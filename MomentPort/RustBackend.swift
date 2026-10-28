@@ -147,7 +147,7 @@ enum RustBackend {
         return String(trimmed.prefix(500))
     }
 
-    /// 预览：只列分组，不写文件。keyIndexes 按组顺序传入，缺省组用 0。
+    /// 预览：只列分组，不写文件。keyIndexes 按组顺序覆盖，缺省组由 Rust 自动选封面/首帧。
     static func preview(input: URL, gap: Double, keyIndexes: [Int]?,
                         customBinary: URL?) throws -> Preview {
         guard let binary = findBinary(customPath: customBinary) else {

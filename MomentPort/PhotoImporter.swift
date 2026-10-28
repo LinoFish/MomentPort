@@ -70,32 +70,43 @@ enum PhotoImporter {
                         return
                     }
                     let ids = placeholders.map { $0.localIdentifier }
-                    let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: nil)
-                    var burstIDs: [String] = []
-                    var represents = false
+                    let fetchOptions = PHFetchOptions()
+                    fetchOptions.includeAllBurstAssets = true
+                    let assets = PHAsset.fetchAssets(withLocalIdentifiers: ids, options: fetchOptions)
+                    var burstIDs: [String?] = []
+                    var representativeCount = 0
                     assets.enumerateObjects { asset, _, _ in
-                        if let bid = asset.burstIdentifier, !bid.isEmpty {
-                            burstIDs.append(bid)
-                        }
-                        if asset.representsBurst { represents = true }
+                        burstIDs.append(asset.burstIdentifier)
+                        if asset.representsBurst { representativeCount += 1 }
                     }
-                    let unique = Array(Set(burstIDs))
-                    let grouped = !unique.isEmpty && unique.count == 1
-                        && assets.count == ordered.count
+                    let facts = BurstVerificationFacts(expectedCount: ordered.count,
+                        identifiers: burstIDs, representativeCount: representativeCount)
+                    let unique = facts.uniqueIdentifiers
+                    let grouped = facts.allFramesGrouped
+                    let represents = representativeCount > 0
+                    // Resolve the burst through PhotoKit's group lookup as well.
+                    // A file-layer UUID or a representative alone cannot pass this check.
+                    var members = Set<String>()
+                    if facts.allFramesGrouped, let burstID = unique.first {
+                        PHAsset.fetchAssets(withBurstIdentifier: burstID, options: fetchOptions)
+                            .enumerateObjects { asset, _, _ in members.insert(asset.localIdentifier) }
+                    }
+                    let confirmed = facts.recognized && Set(ids).count == ordered.count
+                        && Set(ids).isSubset(of: members)
                     let message: String
-                    if grouped && represents {
+                    if confirmed {
                         message = "已识别为连拍：\(assets.count) 帧共享同一个 burstIdentifier，且有代表图。"
                     } else if grouped {
-                        message = "已导入且共享 burstIdentifier，但未检测到代表图（representsBurst 为 false），请在相册里打开确认。"
-                    } else if burstIDs.isEmpty {
+                        message = "已导入且共享 burstIdentifier，但连拍查询未完整确认或代表图数量异常（代表图 \(representativeCount)），尚未确认成组，请在相册里打开确认。"
+                    } else if unique.isEmpty {
                         message = "已导入 \(assets.count) 张，但相册没有给它们 burstIdentifier：本次导入未被识别为连拍。请不要删除输出文件夹，可改用相册里手动建相簿的方式浏览，或换一个相册版本再试（见 README 的“如果没成组”一节）。"
                     } else {
-                        message = "已导入，但 burstIdentifier 不一致（共 \(unique.count) 个不同值），未成一组。"
+                        message = "已导入，但部分帧缺少 burstIdentifier、读取数量不足或组 ID 不一致（共 \(unique.count) 个不同值），未确认全部成组。"
                     }
                     completion(.success(ImportVerification(
                         burstUUID: result.burstUUID, frameCount: result.outputFiles.count,
                         importedCount: assets.count, burstIdentifiers: unique,
-                        representsBurst: represents, message: message)))
+                        representsBurst: represents, recognizedAsBurst: confirmed, message: message)))
                 }
             })
         }

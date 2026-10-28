@@ -1,6 +1,6 @@
 import Foundation
 
-/// 一张待处理的照片。captureTime 是排序与分组的唯一依据，
+/// 一张待处理的照片。captureTime 由 Rust 读取，用于展示及未识别连拍的时间分组，
 /// 取自 EXIF DateTimeOriginal + SubSecTimeOriginal，缺失时用文件修改时间。
 struct PhotoFile: Identifiable, Hashable {
     let id = UUID()
@@ -19,7 +19,7 @@ struct PhotoFile: Identifiable, Hashable {
     }
 }
 
-/// 一组连拍。keyIndex 由用户在界面里选，默认 0（第一帧）。
+/// 一组连拍。keyIndex 默认由 Rust 选荣耀封面/首帧，用户可在界面里覆盖。
 /// 程序不靠 keyIndex 改时间，只在导入时先导关键帧（见 PhotoImporter 的说明），
 /// 并把 keyIndex 写进 manifest，供用户在相册里“选出最佳”时对照。
 struct BurstGroup: Identifiable {
@@ -66,5 +66,26 @@ struct ImportVerification: Identifiable {
     var importedCount: Int
     var burstIdentifiers: [String]
     var representsBurst: Bool
+    var recognizedAsBurst: Bool
     var message: String
+}
+
+/// All imported assets must participate; a representative alone is insufficient.
+struct BurstVerificationFacts {
+    let expectedCount: Int
+    let identifiers: [String?]
+    let representativeCount: Int
+
+    var uniqueIdentifiers: [String] {
+        Array(Set(identifiers.compactMap { id in
+            guard let id = id, !id.isEmpty else { return nil }
+            return id
+        })).sorted()
+    }
+    var allFramesGrouped: Bool {
+        expectedCount > 1 && identifiers.count == expectedCount
+            && identifiers.allSatisfy { !($0 ?? "").isEmpty }
+            && uniqueIdentifiers.count == 1
+    }
+    var recognized: Bool { allFramesGrouped && representativeCount == 1 }
 }

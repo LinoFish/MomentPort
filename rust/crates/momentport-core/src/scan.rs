@@ -6,6 +6,7 @@
 //! - HEIC / 视频 / 其他格式不静默丢弃，记入 `unprocessed` 并写清原因；
 //! - 同名 `.jpg` + `.mov`（同目录、同词干，扩展名大小写不敏感）标为 live 配对。
 
+use crate::honor::{self, HonorBurst};
 use crate::jpeg::exif_capture_time;
 use crate::timeutil::system_time_ms;
 use std::path::{Path, PathBuf};
@@ -19,6 +20,8 @@ pub struct PhotoFile {
     /// 拍摄时间 epoch 毫秒（EXIF 时间或文件修改时间兜底）。
     pub capture_ms: i64,
     pub has_exif_date: bool,
+    /// 仅样片证实的命名标识；无可验证专用元数据时不推测私有 tag。
+    pub honor_burst: Option<HonorBurst>,
 }
 
 impl PhotoFile {
@@ -97,12 +100,10 @@ fn unsupported_reason(ext: &str) -> String {
     }
 }
 
-fn capture_ms_for(path: &Path) -> (i64, bool) {
-    if let Ok(bytes) = std::fs::read(path) {
-        let (ms, has) = exif_capture_time(&bytes);
-        if let Some(ms) = ms {
-            return (ms, has);
-        }
+fn capture_ms_for(path: &Path, bytes: &[u8]) -> (i64, bool) {
+    let (ms, has) = exif_capture_time(bytes);
+    if let Some(ms) = ms {
+        return (ms, has);
     }
     // 兜底：文件修改时间；读不到则用当前时间（与 Swift 版 fallback 思路一致，
     // 但会如实记录 has_exif_date=false；调用方日志可据此区分）。
@@ -117,13 +118,16 @@ fn process_file(path: &Path, file_name: &str, dir_key: &str, out: &mut ScanResul
     let ext = extension_lower(file_name);
     match ext.as_str() {
         "jpg" | "jpeg" => {
-            let (capture_ms, has_exif_date) = capture_ms_for(path);
+            let bytes = std::fs::read(path).unwrap_or_default();
+            let (capture_ms, has_exif_date) = capture_ms_for(path, &bytes);
+            let make = crate::jpeg::exif_make(&bytes);
             out.photos.push(PhotoFile {
                 path: path.to_path_buf(),
                 file_name: file_name.to_string(),
                 dir_key: dir_key.to_string(),
                 capture_ms,
                 has_exif_date,
+                honor_burst: honor::from_filename(file_name, make.as_deref()),
             });
         }
         "mov" | "mp4" | "m4v" => {
@@ -308,5 +312,35 @@ mod tests {
         assert!(r.unprocessed.iter().any(|u| u.file_name == "note.heic"));
         assert!(r.unprocessed.iter().any(|u| u.file_name == "clip.mov"));
         let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn scan_honor_without_metadata_and_reject_conflicting_make() {
+        use crate::tiff::{build_tiff, ByteOrder, ParsedTiff, TiffEntry};
+        let base = std::env::temp_dir().join(format!("momentport-honor-scan-{}", crate::uuid::new_uuid_upper()));
+        let name = "IMG_20230108_205027_BURST002.JPG";
+        // 文件名足够：完全没有 EXIF 时也识别，不依赖 mtime 作为连拍 ID。
+        write_file(&base.join("bare").join(name), &[0xff, 0xd8, 0xff, 0xd9]);
+        for (dir, make) in [("honor", "HONOR"), ("other", "Apple")] {
+            let parsed = ParsedTiff {
+                order: ByteOrder::Big,
+                ifd0: vec![TiffEntry::ascii(0x010f, make)],
+                ..Default::default()
+            };
+            let mut payload = b"Exif\0\0".to_vec();
+            payload.extend(build_tiff(&parsed, b"AF_S\0", None, None));
+            let mut jpg = vec![0xff, 0xd8, 0xff, 0xe1];
+            jpg.extend(((payload.len() + 2) as u16).to_be_bytes());
+            jpg.extend(payload);
+            jpg.extend([0xff, 0xd9]);
+            write_file(&base.join(dir).join(name), &jpg);
+        }
+        let scan = scan_dir(&base).unwrap();
+        assert_eq!(scan.photos.len(), 3);
+        for p in scan.photos {
+            assert_eq!(p.honor_burst.is_some(), p.dir_key != "other");
+            assert!(!p.has_exif_date);
+        }
+        std::fs::remove_dir_all(base).unwrap();
     }
 }

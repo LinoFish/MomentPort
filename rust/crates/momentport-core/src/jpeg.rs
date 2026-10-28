@@ -257,6 +257,35 @@ fn read_makernote_raw(tiff: &[u8], order: ByteOrder) -> (Option<String>, Option<
     makernote::parse(&mn, order)
 }
 
+/// 读取标准 EXIF Make，仅用来排除明确属于其他厂商的文件名匹配。
+pub fn exif_make(data: &[u8]) -> Option<String> {
+    if !data.starts_with(&[0xff, 0xd8]) {
+        return None;
+    }
+    let mut pos = 2;
+    while pos + 4 <= data.len() && data[pos] == 0xff {
+        let marker = data[pos + 1];
+        if marker == 0xda || marker == 0xd9 {
+            break;
+        }
+        if marker == 0x01 || (0xd0..=0xd7).contains(&marker) {
+            pos += 2;
+            continue;
+        }
+        let len = segment_length(data, pos);
+        if len < 2 || pos + 2 + len > data.len() {
+            break;
+        }
+        let payload = &data[pos + 4..pos + 2 + len];
+        if marker == 0xe1 && payload.starts_with(b"Exif\0\0") {
+            let parsed = parse_tiff(&payload[6..]).ok()?;
+            return parsed.ifd0.iter().find(|e| e.tag == 0x010f)?.ascii_string();
+        }
+        pos += 2 + len;
+    }
+    None
+}
+
 /// 从 JPEG 里读拍摄时间：优先 DateTimeOriginal + SubSecTimeOriginal，
 /// 其次 IFD0 的 DateTime；都没有返回 (None, false)。
 /// 返回 (epoch 毫秒, 是否来自 EXIF/TIFF 时间)。
@@ -299,7 +328,7 @@ pub fn exif_capture_time(data: &[u8]) -> (Option<i64>, bool) {
                             let mut ms = dt;
                             if let Some(sub) = exif
                                 .iter()
-                                .find(|e| e.tag == 0xa357)
+                                .find(|e| e.tag == 0x9291)
                                 .and_then(|e| e.ascii_string())
                                 .and_then(|s| parse_subsec_ms(&s))
                             {
@@ -323,7 +352,7 @@ pub fn exif_capture_time(data: &[u8]) -> (Option<i64>, bool) {
                             if let Some(sub) = parsed
                                 .ifd0
                                 .iter()
-                                .find(|e| e.tag == 0xa357)
+                                .find(|e| e.tag == 0x9291)
                                 .and_then(|e| e.ascii_string())
                                 .and_then(|s| parse_subsec_ms(&s))
                             {
@@ -388,7 +417,7 @@ mod tests {
             ifd0: vec![TiffEntry::ascii(0x010f, "HONOR")],
             exif: Some(vec![
                 TiffEntry::ascii(0x9003, "2024:05:01 10:00:00"),
-                TiffEntry::ascii(0xa357, "250"),
+                TiffEntry::ascii(0x9291, "250"),
             ]),
             gps: None,
             interop: None,

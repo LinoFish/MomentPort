@@ -246,6 +246,7 @@ mod tests {
                 dir_key: String::new(),
                 capture_ms: 0,
                 has_exif_date: true,
+                honor_burst: None,
             }],
             burst_uuid: "AAAAAAAA-1111-4111-8111-AAAAAAAAAAAA".to_string(),
             key_index: 0,

@@ -1,0 +1,11 @@
+# Local private samples; never publish personal media or sample reports.
+/样片/
+# Build bundles, Rust artifacts, staging directories and macOS metadata.
+*.app/
+/rust/target/
+/target/
+.momentport-build.*/
+.DS_Store
+# Python validation caches.
+__pycache__/
+*.py[cod]
