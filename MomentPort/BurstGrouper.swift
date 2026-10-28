@@ -1,3 +1,5 @@
+/// 旧版 Swift 转换引擎（v1）。v1.2 起转换事实来源是 Rust（rust/，经 RustBackend.swift 调用），
+/// 本文件不再被界面调用，仅保留以免破坏 Xcode 工程引用；不要在这里改转换逻辑。
 import Foundation
 import ImageIO
 

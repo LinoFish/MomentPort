@@ -4,7 +4,9 @@
 
 分组、EXIF 改写、Manifest 这些逻辑本来就与品牌无关：只要是 JPEG 连拍，哪个品牌导出的散图都按同一规则分组；荣耀只是目前写明的例子，不是唯一支持的品牌。以后要加的功能（其他品牌照片、视频、实况等）都往这个工程里加，不用再起新名字、新工程。
 
-**v1.1（Rust 核心，不用 Xcode）：转换的唯一事实来源是 `rust/` 下的 Rust 实现**，`cargo build --release` 出单文件命令行二进制。原来 v1 的 SwiftUI 工程保留为 v1 界面版，不再是核心；之前一度起步的 Python 转换 CLI 已被 Rust 版取代，不再同时维护两个转换实现（`Tools/verify_burst.py` 只保留作文件层校验脚本）。路线见 `ROADMAP.md`。
+**v1.2（SwiftUI 界面 + Rust 后端）：界面是 SwiftUI，转换的唯一事实来源仍是 `rust/` 下的 Rust 实现**，界面经 `MomentPort/RustBackend.swift` 用进程调用 Rust 二进制（Bundle Resources → 自选路径 → PATH），预览跑 `--list-json`、转换后读 `MomentPortReport.json` 回填结果。原来 v1 的 Swift 转换引擎文件（`BurstGrouper` / `JpegExif` / `AppleMakerNote` / `MomentPortEngine`）已标注弃用、界面不再调用，仅保留以免破坏 Xcode 工程引用；不要在那里改转换逻辑。之前一度起步的 Python 转换 CLI 已被 Rust 版取代，不再同时维护两个转换实现（`Tools/verify_burst.py` 只保留作文件层校验脚本）。路线见 `ROADMAP.md`。
+
+打包不用 Xcode IDE：`sh scripts/build-app.sh`（先 `cargo build --release`，把 Rust 二进制拷进 `.app/Contents/Resources/`，再用 `swiftc` 编 SwiftUI 文件成 bundle、拷并展开 Info.plist 里的 Xcode 变量、做临时签名；任何一步失败都直接退出，不产出半成品）。
 
 ## 先说最重要的结论（不要跳过）
 
@@ -26,7 +28,7 @@ iPhone 连拍的分组标识，在 ExifTool 的 Apple MakerNote 表里是：
 - `0x0015 ImageUniqueID`：每帧各不相同；
 - `0x0001 MakerNoteVersion`：本程序写 15（对应 macOS 12 / iOS 15 时代常见的版本，不是声称照片就是 iPhone 拍的）。
 
-程序的做法（`MomentPort/AppleMakerNote.swift` + `MomentPort/JpegExif.swift`）：
+程序的做法（v1.2 起是 `rust/crates/momentport-core/`，旧 Swift 版是 `MomentPort/AppleMakerNote.swift` + `MomentPort/JpegExif.swift`，已弃用）：
 
 - 只改 JPEG 的 EXIF 段：解析原 TIFF（IFD0 / ExifIFD / GPS / Interop / 简单 JPEG 缩略图 IFD1），把原有条目原样重建，只替换 / 新增 MakerNote 条目（`0x927C`）；
 - 像素扫描数据（SOS 之后）原样复制，**不解码、不重新编码**；
@@ -62,11 +64,19 @@ cargo test
 ./target/release/momentport-cli <输入文件夹> <输出文件夹> --dry-run
 ./target/release/momentport-cli <输入文件夹> <输出文件夹> --list
 
+# 机器可读预览（供 SwiftUI 界面解析）：只列分组不写文件，输出文件夹可省略
+./target/release/momentport-cli <输入文件夹> --list-json --gap 2.0
+
 # 改切分间隔、改关键帧、把单张也原样拷出来
 ./target/release/momentport-cli <输入文件夹> <输出文件夹> --gap 3.0 --key-index 1 --copy-singles
+
+# 每组不同的关键帧：按组顺序给，缺省的组用 --key-index 的值
+./target/release/momentport-cli <输入文件夹> <输出文件夹> --key-indexes 1,0
 ```
 
-参数说明：`--gap` 默认 2.0 秒（平铺文件夹里相邻间隔 > gap 切分，≤ gap 归一组）；`--key-index` 默认 0（越界时钳制到最后一帧）；`--copy-singles` 默认关闭（单张只记录，不写 BurstUUID；打开后原样拷到 `Singles/`，仍不写 BurstUUID）。
+参数说明：`--gap` 默认 2.0 秒（平铺文件夹里相邻间隔 > gap 切分，≤ gap 归一组）；`--key-index` 默认 0（越界时钳制到最后一帧）；`--key-indexes` 按组顺序覆盖关键帧，越界同样钳制；`--copy-singles` 默认关闭（单张只记录，不写 BurstUUID；打开后原样拷到 `Singles/`，仍不写 BurstUUID）。
+
+`--list-json` 字段对照（改 Rust 那边必须同步改 `MomentPort/RustBackend.swift`，否则界面解码失败）：`gap` / `groups[{sourceDescription, keyIndex, photos[{fileName, dirKey, captureMs, captureISO, hasExifDate, liveVideoFileName}]}]` / `singles[同 photo]` / `livePairs[{photoFileName, photoDirKey, videoFileName}]` / `unprocessed[{fileName, dirKey, reason}]`。注意：预览里没有 `burstUUID`——Rust 每次分组都会新生成 UUID，预览那次的 UUID 不是转换那次的，界面不在预览里展示它；真正的 burstUUID 只在转换报告里读到。
 
 输出结构（原图文件夹原封不动）：
 
@@ -146,14 +156,18 @@ python3 Tools/verify_burst.py 输出文件夹/Burst_01 原图文件夹
 MomentPort.xcodeproj/project.pbxproj   Xcode 工程（macOS 12、Swift 5）
 MomentPort/
   App.swift                 SwiftUI 入口
-  ContentView.swift         四步界面：选文件夹 → 分组 → 转换 → 导入验证
+  ContentView.swift         四步界面（v1.2）：选文件夹 → 分组 → 转换 → 导入验证，走 RustBackend
+  DesignSystem.swift        v1.2 设计系统：品牌色、间距、按钮、帧条、状态条
+  RustBackend.swift         v1.2 唯一接线层：Process 调 Rust 二进制，--list-json 预览、读报告回填
   Models.swift              PhotoFile / BurstGroup / Manifest / 验证结果
-  BurstGrouper.swift        子文件夹优先 + 时间间隔分组，读 EXIF 拍摄时间
-  JpegExif.swift            JPEG 段级改写 + TIFF 解析/重建（像素不动）
-  AppleMakerNote.swift      Apple MakerNote：BurstUUID / ImageUniqueID
-  MomentPortEngine.swift    转换引擎：复制、写标识、写完读回校验、写 manifest
-  PhotoImporter.swift       PhotoKit 导入 + burstIdentifier 回查
+  BurstGrouper.swift        【已弃用】v1 Swift 分组，界面不再调用
+  JpegExif.swift            【已弃用】v1 Swift JPEG 改写，界面不再调用
+  AppleMakerNote.swift      【已弃用】v1 Swift MakerNote，界面不再调用
+  MomentPortEngine.swift    【已弃用】v1 Swift 转换引擎；Result 类型仍被导入清单复用，逻辑不再调用
+  PhotoImporter.swift       PhotoKit 导入 + burstIdentifier 回查（仍是导入验证的唯一入口）
   Info.plist                照片权限说明等
+scripts/
+  build-app.sh              v1.2 打包：cargo + swiftc 成 .app，不用 Xcode IDE
 Tools/
   verify_burst.py           不依赖 exiftool 的文件层校验脚本（只校验，不转换）
 rust/                       v1.1 转换核心（唯一事实来源，零外部 crate）
@@ -186,3 +200,16 @@ ROADMAP.md                  路线图：v1、v1.1 Rust 转向、更远的通用�
 - 协调员独立合成测试集（不用子代理的测试集）：子文件夹组 3 帧（含大写 `.JPG`）、平铺时间切分 f1+f2、缺 EXIF 时间用 mtime 兜底 n1+n2、live 子文件夹 2 帧 + 同名 `.mov`、单张 f3 与 solo、未处理 3 项（隐藏文件、`.heic`、未配对 `.mov`）。结果：4 组共 9 帧全部成功 0 跳过；`--dry-run` 未创建输出文件夹；`--copy-singles` 下单张原样进 `Singles/`；`verify_burst.py` 逐组通过（同组 BurstUUID 唯一 1 种、ImageUniqueID 各不相同、SOS 与原图一致）；live 的 `.mov` 字节与原文件一致；原图文件夹 SHA-256 对比**全部未动**。
 - 协调员测试中发现并已修复一个真实问题：部分写入器（含 PIL）把 `0x9003 DateTimeOriginal` 直接放在 IFD0 而非 ExifIFD 里，Rust 原版只在 ExifIFD 里找，会误退回 mtime 兜底、导致平铺组错合。已补 IFD0 兜底并加单测（`exif_time_in_ifd0_is_recognized`），修复后上述分组才全部正确。真实设备文件通常在 ExifIFD 里，修复前也不会在真机文件上全军覆没，但 ImageIO 式读取本应两种位置都认。
 - **未验证、不要按已验证来用**：没有在 macOS 上编译运行之外的验证（本机无 Mac），没有在相册里成组，没有复用 PhotoKit；AppleScript 兜底未经 macOS 实测；Rust 把无时区 EXIF 墙上时间按 UTC 换算仅用于排序切分，macOS 侧如需绝对本地时间应以 ImageIO 为准。
+
+## v1.2 验证记录（2026-10-28，Linux；Swift 部分未编译，见下）
+
+已做：
+- Rust：`cargo test` 22 通过（核心 19 + CLI 新增 3：--list-json 不要求输出文件夹、--key-indexes 按组顺序解析、非法取值报错）。
+- 合成集：子文件夹组 2 帧（含大写 `.JPG`）、平铺组 2 帧、单张 2 张（含 1 对 live 配对）、未处理 1 项（HEIC）。`--list-json` 经 `python3 -m json.tool` 校验为合法 JSON，组顺序关键帧为 `1,0`（与传入的 `--key-indexes 1,0` 一致）；转换后 `verify_burst.py` 两组均通过（同组 BurstUUID 唯一 1 种、ImageUniqueID 各不相同、SOS 与原图一致）。
+- 字段对照：Rust `--list-json` 键名与 `RustBackend.swift` 的 `Preview` / `PreviewGroup` / `PreviewPhoto` / `PreviewLivePair` / `PreviewUnprocessed` 逐一核对一致；转换报告键名与 `Report` / `ReportGroup`、清单键名与 `BurstManifest` 逐一核对一致（报告其余字段 Swift 会忽略未知键）。
+- Swift 文件只做了括号配对与“界面不再调用旧引擎”的 grep 检查，未做编译。
+
+未做（原因）：
+- Swift 编译与界面实测：本机是 Linux，没有 Swift / Xcode，`scripts/build-app.sh` 只在 macOS 上能跑到 swiftc 那步；ContentView 的新布局、帧条点选、错误条、导入分开呈现均未在 Mac 上实测，**不要按已验证来用**。
+- PhotoKit 回查：仍待 Dong 在 Mac 上导入后验证，与 v1 / v1.1 相同。
+- 推送 GitHub：本地改完即停，未推；推送要等 Dong 能及时批准的时间窗口再做，避免上次审批超时过期。

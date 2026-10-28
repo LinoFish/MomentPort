@@ -13,6 +13,8 @@
 		00000000000000000000006A /* AppleMakerNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CE /* AppleMakerNote.swift */; };
 		00000000000000000000006B /* MomentPortEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000CF /* MomentPortEngine.swift */; };
 		00000000000000000000006C /* PhotoImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000D0 /* PhotoImporter.swift */; };
+		00000000000000000000006D /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000D1 /* DesignSystem.swift */; };
+		00000000000000000000006E /* RustBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0000000000000000000000D2 /* RustBackend.swift */; };
 		0000000000000000000000C9 /* App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App.swift; sourceTree = "<group>"; };
 		0000000000000000000000CA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		0000000000000000000000CB /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -21,6 +23,8 @@
 		0000000000000000000000CE /* AppleMakerNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleMakerNote.swift; sourceTree = "<group>"; };
 		0000000000000000000000CF /* MomentPortEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MomentPortEngine.swift; sourceTree = "<group>"; };
 		0000000000000000000000D0 /* PhotoImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoImporter.swift; sourceTree = "<group>"; };
+		0000000000000000000000D1 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		0000000000000000000000D2 /* RustBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RustBackend.swift; sourceTree = "<group>"; };
 		00000000000000000000012C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		000000000000000000000006 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
@@ -47,6 +51,8 @@
 				0000000000000000000000CE /* AppleMakerNote.swift */,
 				0000000000000000000000CF /* MomentPortEngine.swift */,
 				0000000000000000000000D0 /* PhotoImporter.swift */,
+				0000000000000000000000D1 /* DesignSystem.swift */,
+				0000000000000000000000D2 /* RustBackend.swift */,
 				00000000000000000000012C /* Info.plist */,
 			);
 			path = MomentPort;
@@ -118,6 +124,8 @@
 				00000000000000000000006A /* AppleMakerNote.swift in Sources */,
 				00000000000000000000006B /* MomentPortEngine.swift in Sources */,
 				00000000000000000000006C /* PhotoImporter.swift in Sources */,
+				00000000000000000000006D /* DesignSystem.swift in Sources */,
+				00000000000000000000006E /* RustBackend.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
